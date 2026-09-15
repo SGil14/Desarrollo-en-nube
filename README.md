@@ -1,17 +1,17 @@
 # Cuentas Claras
 
-Sistema local de gestión financiera personal: ingresos, gastos, presupuestos,
-metas de ahorro, deudas/cuentas y análisis.
+Sistema local de gestión financiera personal: ingresos, gastos, cuentas,
+presupuestos, metas de ahorro, deudas y análisis.
 
-Corre enteramente en esta PC. No usa ningún servicio en la nube: el servidor
-es un proceso de Node.js y los datos se guardan en un PostgreSQL que corre en
-esta misma máquina. Sin internet funciona igual (salvo la tipografía, que se
-descarga de Google Fonts si hay conexión; si no, usa una tipografía del
-sistema).
+Corre enteramente en esta PC. No usa ningún servicio en la nube: el backend es
+una API en **FastAPI** (Python) y los datos se guardan en un PostgreSQL que
+corre en esta misma máquina. Sin internet funciona igual (salvo la
+tipografía, que se descarga de Google Fonts si hay conexión; si no, usa una
+tipografía del sistema).
 
 ## Requisitos
 
-- Node.js 22 o superior. Ya lo tenés instalado.
+- Python 3.10 o superior. Ya lo tenés instalado.
 - PostgreSQL corriendo localmente (ya lo tenés instalado y como servicio,
   `postgresql-x64-18`).
 
@@ -22,10 +22,11 @@ sistema).
    PostgreSQL). El resto de los valores (`PGUSER=postgres`,
    `PGDATABASE=cuentas_claras`) ya están puestos.
 
-2. Instalá la única dependencia (el driver de PostgreSQL), una sola vez:
+2. Creá el entorno virtual e instalá las dependencias (una sola vez):
 
    ```
-   npm install
+   python -m venv .venv
+   .venv\Scripts\pip install -r requirements.txt
    ```
 
 No hace falta crear ningún usuario ni base a mano: el servidor crea la base
@@ -33,7 +34,8 @@ No hace falta crear ningún usuario ni base a mano: el servidor crea la base
 `postgres`.
 
 El archivo `.env` no se comparte ni se sube a ningún lado — queda solo en tu
-disco. Hay un `.env.example` de referencia por si necesitás recrearlo.
+disco (está en `.gitignore`). Hay un `.env.example` de referencia por si
+necesitás recrearlo.
 
 ## Cómo usarlo (cada vez)
 
@@ -43,15 +45,15 @@ disco. Hay un `.env.example` de referencia por si necesitás recrearlo.
 2. Abrí una terminal en esta carpeta (`Escritorio\Finanzas`) y ejecutá:
 
    ```
-   npm start
+   .venv\Scripts\python run.py
    ```
-
-   (equivale a `node server.js`; usá esa segunda forma si `npm start` te da
-   un error de "scripts deshabilitados" de PowerShell)
 
 3. Se abre solo el navegador en `http://localhost:4500`. Si no se abre solo,
    entrá manualmente a esa dirección.
 4. Para detener el servidor, volvé a la terminal y presioná `Ctrl+C`.
+
+La documentación interactiva de la API (generada automáticamente por
+FastAPI) queda disponible en `http://localhost:4500/docs`.
 
 ## Dónde están tus datos
 
@@ -59,9 +61,9 @@ En la base `cuentas_claras` de tu PostgreSQL local (no en un archivo suelto).
 
 - **Backup**: `"C:\Program Files\PostgreSQL\18\bin\pg_dump.exe" -U postgres -h localhost cuentas_claras > backup.sql`
 - **Restaurar**: `"C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -h localhost cuentas_claras < backup.sql`
-- **Mudarte de PC**: instalá PostgreSQL en la otra máquina, restaurá el backup
-  ahí, copiá la carpeta `Finanzas` (con su `.env` actualizado) y corré
-  `npm start`.
+- **Mudarte de PC**: instalá PostgreSQL y Python en la otra máquina, restaurá
+  el backup ahí, copiá la carpeta `Finanzas` (con su `.env` actualizado) y
+  seguí los pasos de configuración inicial.
 - **Empezar de cero**: usá el botón "Borrar todos los datos" dentro de
   Ajustes (deja las tablas vacías, no hace falta tocar la base a mano).
 
@@ -69,11 +71,28 @@ En la base `cuentas_claras` de tu PostgreSQL local (no en un archivo suelto).
 
 ```
 Finanzas/
-  server.js          servidor Node (API + estáticos) + conexión a PostgreSQL
-  package.json
-  .env                credenciales de tu PostgreSQL local (no se comparte)
-  .env.example        plantilla de referencia
-  public/
+  run.py                punto de entrada: levanta uvicorn y abre el navegador
+  requirements.txt
+  .env                   credenciales de tu PostgreSQL local (no se comparte)
+  .env.example           plantilla de referencia
+  app/
+    main.py               crea la app FastAPI, monta rutas y estaticos
+    config.py             carga de .env y constantes
+    db.py                 pool de conexion, esquema, migraciones, seed
+    schemas.py             modelos Pydantic (validacion de requests)
+    nu_parser.py           parser del extracto de tarjeta Nu Colombia (PDF)
+    routers/
+      state.py              GET /api/state (todo el estado de la app)
+      transactions.py        movimientos (alta/edicion/borrado/bulk)
+      accounts.py             cuentas
+      budgets.py               presupuestos
+      goals.py                  metas de ahorro
+      debts.py                   deudas
+      category_rules.py           reglas de categorizacion automatica
+      settings.py                  moneda, categorias, borrado de datos
+      imports.py                    importar extracto PDF de Nu
+      exports.py                     exportar CSV
+  public/                 frontend estatico (sin cambios)
     index.html
     style.css
     app.js
