@@ -1,0 +1,15 @@
+# Node (backend viejo, se va a eliminar tras la migracion)
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Entorno / secretos
+.env
+
+# Datos locales
+*.db
+*.sqlite
