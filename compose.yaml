@@ -1,0 +1,36 @@
+services:
+  app:
+    build: .
+    image: cuentas-claras:local
+    ports:
+      - "127.0.0.1:${PORT:-4500}:4500"
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: ${PGDATABASE:-cuentas_claras}
+      PGUSER: ${PGUSER:-postgres}
+      PGPASSWORD: ${PGPASSWORD:?Configura PGPASSWORD en .env}
+      PGSSLMODE: disable
+      PG_AUTO_CREATE_DB: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:18-bookworm
+    environment:
+      POSTGRES_DB: ${PGDATABASE:-cuentas_claras}
+      POSTGRES_USER: ${PGUSER:-postgres}
+      POSTGRES_PASSWORD: ${PGPASSWORD:?Configura PGPASSWORD en .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
