@@ -167,7 +167,10 @@ async def seed_examples() -> None:
 
         budgets = [("Vivienda", 650), ("Alimentación", 260), ("Transporte", 120), ("Entretenimiento", 80)]
         for category, limit in budgets:
-            await conn.execute("INSERT INTO budgets (category, limit_amount) VALUES ($1,$2)", category, limit)
+            await conn.execute(
+                "INSERT INTO budgets (category, limit_amount) VALUES ($1,$2) ON CONFLICT (category) DO NOTHING",
+                category, limit,
+            )
 
         await conn.execute(
             "INSERT INTO goals (id, name, target, current, target_date) VALUES ($1,$2,$3,$4,$5)",
@@ -181,14 +184,21 @@ async def seed_examples() -> None:
 
 async def ensure_seeded() -> None:
     settings = await get_settings()
-    if not settings:
+    if settings:
+        return
+
+    async with pool.acquire() as conn:
+        already = await conn.fetchval("SELECT COUNT(*) FROM budgets")
+
+    if already == 0:
         await seed_examples()
-        await save_settings({
-            "currency": "$",
-            "expenseCategories": DEFAULT_EXPENSE_CATS,
-            "incomeCategories": DEFAULT_INCOME_CATS,
-            "isExample": True,
-        })
+
+    await save_settings({
+        "currency": "$",
+        "expenseCategories": DEFAULT_EXPENSE_CATS,
+        "incomeCategories": DEFAULT_INCOME_CATS,
+        "isExample": True,
+    })
 
 
 async def ensure_accounts_migrated() -> None:
