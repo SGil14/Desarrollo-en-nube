@@ -1,9 +1,10 @@
 """Cuentas Claras - API en FastAPI.
 
-Guarda todo en un PostgreSQL que corre en esta misma PC. No se envia nada a
-ningun servidor externo. Las credenciales se leen de ".env" (nunca se
-hardcodean aca).
+Los datos se guardan en PostgreSQL. En local es el contenedor "db" o tu
+instalacion de Windows; en Azure es un Flexible Server administrado. Las
+credenciales se leen del entorno (nunca se hardcodean aca).
 """
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -18,17 +19,17 @@ from app.routers import accounts, budgets, category_rules, debts, exports, goals
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
+    # En Azure la base ya existe y el usuario de la app no puede crearla:
+    # PG_AUTO_CREATE_DB=false desactiva ese intento.
+    if os.getenv("PG_AUTO_CREATE_DB", "true").lower() != "false":
         await db.ensure_database_exists()
-        await db.create_pool()
-        async with db.pool.acquire() as conn:
-            await conn.fetchval("SELECT 1")
-    except Exception as err:
-        print("\n  No se pudo conectar a PostgreSQL.")
-        print('  Revisá que el servicio "postgresql-x64-18" esté corriendo y que')
-        print("  los datos en .env (usuario, contraseña) sean correctos.")
-        print(f"  Detalle: {err}\n")
-        raise SystemExit(1)
+
+    # Sin try/except: si PostgreSQL no responde, la excepcion sube y queda en
+    # los logs del contenedor. Un SystemExit aca hacia que Azure reiniciara la
+    # revision en bucle sin dejar rastro del error real.
+    await db.create_pool()
+    async with db.pool.acquire() as conn:
+        await conn.fetchval("SELECT 1")
 
     await db.init_schema()
     await db.ensure_accounts_migrated()
@@ -60,5 +61,26 @@ for router in (state.router, accounts.router, transactions.router, budgets.route
                debts.router, category_rules.router, settings.router, imports.router, exports.router):
     app.include_router(router)
 
-# Se monta al final: las rutas /api/* de arriba tienen prioridad sobre el catch-all de estaticos.
+
+# Sondas de salud. Deben declararse ANTES del mount de estaticos: el mount en
+# "/" es un catch-all y se comeria estas rutas.
+@app.get("/health/live", include_in_schema=False)
+async def health_live():
+    """El proceso responde. No toca la base."""
+    return {"status": "ok"}
+
+
+@app.get("/health/ready", include_in_schema=False)
+async def health_ready():
+    """El proceso responde Y la base contesta."""
+    try:
+        async with db.pool.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+    except Exception as err:
+        return JSONResponse(status_code=503, content={"status": "not ready", "detail": str(err)})
+    return {"status": "ok"}
+
+
+# Se monta al final: las rutas /api/* y /health/* de arriba tienen prioridad
+# sobre el catch-all de estaticos.
 app.mount("/", StaticFiles(directory=str(PUBLIC_DIR), html=True), name="public")
